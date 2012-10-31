@@ -1,0 +1,722 @@
+/**
+*
+*  Ebook Module
+*
+*  Module developed for integration of diferent ebook vendors for the libraries.
+*
+* @author Suzane Goncalves <suzanehgoncalves@gmail.com>
+* @copyright GPL2 2012, Suzane Goncalves
+*
+*/
+
+<?php
+
+// $Id$
+/**
+* @file
+* Let user access contents from 3m and overdrive at same time.
+*
+* Show 3m and overdrive book searching widgets
+*/
+
+
+
+
+/**
+* Implementation of hook_settings().
+*/
+
+function ebooks_settings_validate($form, $form_state){
+   $companies = $form_state["values"]["ebooks_settings_companies"];
+   $validationOk = false;
+   
+   foreach($companies as $i => $company){
+      if($company != "0"){
+         $validationOk = true;
+         break;
+      }
+   }
+   
+   if($validationOk == false){
+      form_set_error("ebooks_settings_companies", "Must be selected at least one company");
+   }
+
+}
+
+function ebooks_settings(){
+   $form = array();
+
+   $form["ebooks_settings_fieldset"] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Ebooks Settings'
+   );
+   
+   $companies = array(
+      '3m' => '3M Panel',
+      'overdrive' => 'Overdrive Panel'
+   );
+
+   $selectedCompanies = variable_get('ebooks_settings_companies', array());
+
+   $form["ebooks_settings_fieldset"]["ebooks_settings_companies"] = array(
+      '#type' => 'checkboxes',
+      '#title' => 'Choose the available companies',
+      '#options' => $companies,
+      '#default_value' => $selectedCompanies
+   );
+
+   $form = system_settings_form($form);
+
+
+   return $form;
+}
+
+/**
+* Implementation of hook_perm().
+*/
+
+function ebooks_perm(){
+   return array('search ebooks');
+}
+
+
+/**
+* Implementation of hook_block().
+*/
+
+function ebooks_block($op='list', $delta=0){
+   $module_url = drupal_get_path('module','ebooks');
+   drupal_add_css($module_url . '/ebooks.css');
+
+   switch($op){
+      case 'list':
+         $block[0]['info'] = t('Search E-Books');
+         break;
+
+      case 'view':
+         switch($delta){
+            case 0:
+               $block['content'] = drupal_get_form('ebooks_get_block');
+               break;
+         }
+         break;
+   }
+
+   return $block;
+}
+
+function ebooks_get_block(){
+
+   $form = array(
+      '#id' => 'ebooks-block-form',
+      '#action' => url('ebooks/search'),
+   );
+
+   $form['ebooks_block_fieldset'] = array(
+      '#type' => 'fieldset'
+   );
+
+   $form['ebooks_block_fieldset']['ebooks_block_search'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Title/Author/ISBN',
+      '#size' => 20,
+      '#required' => true
+   );
+
+   $form['ebooks_block_fieldset']['ebooks_available'] = array(
+      '#type' => 'checkbox',
+      '#title' => 'Only available books'
+   );
+
+   $form['ebooks_block_fieldset']['ebooks_submit'] = array(
+      '#type' => 'button',
+      '#value' => 'Search'
+   );
+
+
+   return $form;
+}
+
+/**
+* Implementation of hook_menu().
+*/
+
+function ebooks_menu(){
+
+    $items['ebooks/search'] = array(
+        'title' => 'E-Books Searching',
+        'description' => 'Search your favorite books.',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('ebooks_get_widgets_form'),
+        'access arguments' => array('search ebooks'),
+        'type' => MENU_NORMAL_ITEM,
+        'menu_name' => 'primary-links'
+    );
+
+    $items['ebooks/overdrive/author'] = array(
+        'page callback' => 'ebooks_overdrive_author',
+        'access arguments' => array('search ebooks'),
+        'type' => MENU_CALLBACK
+    );
+
+    $items['ebooks/overdrive/search'] = array(
+        'page callback' => 'ebooks_pages_overdrive',
+        'access arguments' => array('search ebooks'),
+        'type' => MENU_CALLBACK
+    );
+
+    $items['ebooks/3m/search'] = array(
+        'page callback' => 'ebooks_pages_3m',
+        'access arguments' => array('search ebooks'),
+        'type' => MENU_CALLBACK
+    );
+
+    $items['admin/settings/ebooks'] = array(
+         'page callback' => 'drupal_get_form',
+         'page arguments' => array('ebooks_settings'),
+         'title' => 'E-Books Settings',
+         'access arguments' => array('configure ebooks'),
+         'type' => MENU_NORMAL_ITEM
+    );
+
+   return $items;
+}
+function ebooks_pages_overdrive(){
+    $url    = $_POST['url'];
+    $cookie = $_POST['cookie'];
+    $cookie_url = $_POST['cookie_url'];
+
+
+    $ebooks_overd = curl_init();
+
+    curl_setopt($ebooks_overd, CURLOPT_URL, $url);
+    curl_setopt($ebooks_overd, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ebooks_overd, CURLOPT_HEADER, true);
+    curl_setopt($ebooks_overd, CURLOPT_COOKIE, $cookie);
+    curl_setopt($ebooks_overd, CURLOPT_REFERER, 'myrcpl.lib.overdrive.com');
+    curl_setopt($ebooks_overd, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.56 Safari/536.5');
+    curl_setopt($ebooks_overd, CURLINFO_HEADER_OUT, true);
+
+    $search_overd = curl_exec($ebooks_overd);
+    $i= strpos($search_overd, '<table border="0" width="100%" cellspacing="0" cellpadding="0">
+<script language="JavaScript"><!--
+g_bFutureOnSaleDate = false;
+//--></script>');
+
+    $h = strpos($search_overd, '</table>
+<hr color="#808080" size="1" noshade>
+<table border="0" align="center" cellpadding="3" cellspacing="2">')-$i;
+
+    $search_overd = substr($search_overd, $i, $h);
+
+    $search_overd = str_replace('href="', 'href="http://myrcpl.lib.overdrive.com/', $search_overd);
+    $search_overd = str_replace('"/', '"http://myrcpl.lib.overdrive.com/', $search_overd);
+    $search_overd = str_replace('<form', '<div class="form" ',$search_overd);
+    $search_overd = str_replace('</form', '</div',$search_overd);
+    $search_overd = str_replace('<td width="60"', '<td class="ebook-img-col" ', $search_overd);
+    $search_overd = str_replace('<td width="15"', '<td class="ebook-empty-col" ', $search_overd);
+    $search_overd = str_replace('<td height="5"', '<td class="ebook-empty-col" ', $search_overd);
+    $search_overd = str_replace('<td colspan="2"', '<td class="ebook-description-col" ', $search_overd);
+    $search_overd = str_replace('<tr valign="top">' . "\r\n\t" . '<td', '<tr valign="top"><td class="ebook-source-col" ', $search_overd);
+    $search_overd = str_replace('<td colspan="3"', '<td class="ebook-end-item" ', $search_overd);
+    $search_overd = str_replace('<script', '<noscript', $search_overd);
+    $search_overd = str_replace('</script', '</noscript', $search_overd);
+
+    $search_overd = ebooks_overdrive_authorname($search_overd, $cookie, $cookie_url);
+
+    echo $search_overd;
+    exit;
+
+}
+
+function ebooks_pages_3m(){
+    $url    = $_REQUEST['url'];
+
+    // Initialize a cURL session
+    $ebooks_3m = curl_init();
+
+    curl_setopt($ebooks_3m, CURLOPT_URL, $url);
+    curl_setopt($ebooks_3m, CURLOPT_HEADER, true);
+    curl_setopt($ebooks_3m, CURLOPT_NOBODY, false);
+    curl_setopt($ebooks_3m, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ebooks_3m, CURLOPT_REFERER, $url);
+    curl_setopt($ebooks_3m, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:14.0) Gecko/20100101 Firefox/14.0.1");
+
+    $search_3m = curl_exec($ebooks_3m);
+
+
+    $cookie = '';
+
+
+    $headers = explode("\n", $search_3m);
+
+    foreach($headers as $index => $value){
+
+      $header_arr = explode(': ', $value);
+      $hName = $header_arr[0];
+      $hValue = $header_arr[1];
+
+      if($hName == 'Set-Cookie'){
+        $hValue = substr($hValue, 0, strpos($hValue, ';'));
+
+        if($cookie)
+          $cookie .= '; ';
+
+        $cookie .= $hValue;
+      }
+    }
+
+
+    curl_setopt($ebooks_3m, CURLOPT_URL, $url);
+    curl_setopt($ebooks_3m, CURLOPT_COOKIE, $cookie);
+    curl_setopt($ebooks_3m, CURLOPT_HEADER, false);
+    curl_setopt($ebooks_3m, CURLINFO_HEADER_OUT, true);
+    curl_setopt($ebooks_3m, CURLOPT_NOBODY, false);
+    curl_setopt($ebooks_3m,CURLOPT_HTTPHEADER,array (
+      'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    ));
+
+    $search_3m = curl_exec($ebooks_3m);
+
+
+    //getting only div that we need.
+    //i-> where to start h-> how many char to go
+
+    if(strpos($search_3m, 'class="doc-link"') !== false){
+      $i= strpos($search_3m, 'channel-list-view')+19;
+      $h= strpos($search_3m, 'root-footer')- $i - 9;
+
+      $search_3m = substr($search_3m, $i, $h);
+      $search_3m = str_replace('/library/', 'http://ebook.3m.com/library/', $search_3m);
+      $search_3m = str_replace('/delivery/', 'http://ebook.3m.com/delivery/', $search_3m);
+      $search_3m = str_replace('<form', '<div class="form" ', $search_3m);
+      $search_3m = str_replace('</form', '</div', $search_3m);
+
+      if(strpos($search_3m, 'Sorry, no results found. Please try modifying your query.')){
+        exit;
+      }
+
+
+      echo '<div><div><div>'.$search_3m;
+    }
+
+    exit;
+
+}
+
+function ebooks_get_widgets_form_submit($form, &$form_state){
+   $form_state['storage']['values'] = $form_state['values'];
+   $form_state['storage']['searched'] = true;
+   $form_state['rebuild'] = true;
+}
+
+function ebooks_get_widgets_form($form_state){
+   $module_url = drupal_get_path('module','ebooks');
+
+   drupal_add_css($module_url . '/ebooks.css');
+   drupal_add_js($module_url . '/loading.js');
+   drupal_add_js($module_url . '/loadingPages.js');
+
+   $searched = isset($form_state['storage']['searched']);
+
+   $form['ebooks_block_form'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Find ebooks'),
+      '#class' => 'me',
+      '#attributes' => array('id' => 'ebooks_form')
+   );
+
+   $form['ebooks_block_form']['ebooks_block_search'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Search'),
+      '#description' => t("You may insert an ISBN, Author or a Book Name")
+   );
+
+   $form['ebooks_block_form']['ebooks_available'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Only available books'),
+      '#value' => isset($form_state['post']) && isset($form_state['post']['ebooks_available']) ? '1' : '0'
+   );
+
+   $form['ebooks_block_form']['ebooks_submit'] = array(
+      '#type' => 'submit',
+      '#default_value' => 'Search Book',
+      '#attributes' => array('class' => 'show-loading')
+   );
+
+   $form['ebooks_loading_panel'] = array(
+      '#value' => '<div id="ebooks-loading-panel">'.t('Searching Books').'</div>'
+   );
+
+   if($searched){
+      $values = $form_state['storage']['values'];
+      
+      $companies = variable_get('ebooks_settings_companies', array());
+
+      $form['ebooks_block_form']['ebooks_within_results'] = array(
+         '#type' => 'submit',
+         '#default_value' => t('Search Within Results'),
+         '#attributes' => array('class' => 'show-loading')
+      );
+
+      $options = array();
+
+      if($values['ebooks_available']){
+         $options['only-available'] = true;
+      }
+      
+      if($values['op'] == t('Search Within Results')){
+         $options['search-within-results'] = true;
+      }
+
+      if($companies['3m'] != '0'){
+
+         if(isset($values['ebooks_3m_last_search'])){
+            $options['last-search'] = $values['ebooks_3m_last_search'];
+         }
+
+         $form['ebooks_result_3m'] = array(
+            '#type' => 'fieldset',
+            '#title' => '3M',
+            '#attributes' => array('id' => 'ebooks-3m'),
+            '#value' => ebooks_get_3m_html($values['ebooks_block_search'], $options)
+         );
+
+         $form['ebooks_3m_last_search'] = array(
+            '#type' => 'hidden',
+            '#value' => $options['last-search']
+         );
+
+         unset($options['last-search']);
+      }
+
+      if($companies['overdrive'] != '0'){
+
+         if(isset($values['ebooks_overdrive_last_search'])){
+            $options['last-search'] = $values['ebooks_overdrive_last_search'];
+         }
+
+         if(isset($values['ebooks_overdrive_last_cookie'])){
+            $options['last-cookie'] = $values['ebooks_overdrive_last_cookie'];
+         }
+
+
+         $form['ebooks_result_overdrive'] = array(
+            '#type' => 'fieldset',
+            '#title' => 'Overdrive',
+            '#attributes' => array('id' => 'ebooks-overdrive'),
+            '#value' =>  ebooks_get_overdrive_html($values['ebooks_block_search'], $options)
+         );
+
+         $form['ebooks_overdrive_last_search'] = array(
+            '#type' => 'hidden',
+            '#value' => $options['last-search']
+         );
+
+         $form['ebooks_overdrive_last_cookie'] = array(
+            '#type' => 'hidden',
+            '#value' => $options['last-cookie']
+         );
+      
+      }
+   }
+
+   return $form;
+
+}
+
+
+function ebooks_get_3m_html($ebooks_search, &$options){
+   if(isset($options['search-within-results'])){
+      $ebooks_search = $options['last-search'] . ' ' . $ebooks_search;
+   }
+
+
+   $ebooks_3m_url = str_replace(' ', '%20', str_replace('-', '__token_sepp__', $ebooks_search));
+
+   if(isset($options['only-available'])){
+      $available = 'exclude';
+   }
+   else{
+      $available = 'include';
+   }
+
+   $full_url = "http://ebook.3m.com/library/RCPL-query-$ebooks_3m_url-not_in_stock_items-exclude-physical_items-exclude-not_loanable_items-$available-search/";
+
+
+   //3M SEARCH *************************************************************************************************************************************
+   // Initialize a cURL session
+   $ebooks_3m = curl_init();
+
+   curl_setopt($ebooks_3m, CURLOPT_URL, $full_url);
+   curl_setopt($ebooks_3m, CURLOPT_RETURNTRANSFER, true);
+
+   $search_3m = curl_exec($ebooks_3m);
+
+   //getting only div that we need.
+   //i-> where to start h-> how many char to go
+
+   if(strpos($search_3m, 'channel-list-view') !== false){
+      $i= strpos($search_3m, 'channel-list-view')+19;
+      $h= strpos($search_3m, 'root-footer')- $i - 9;
+
+      $search_3m = substr($search_3m, $i, $h);
+      $search_3m = str_replace('/library/', 'http://ebook.3m.com/library/', $search_3m);
+      $search_3m = str_replace('/delivery/', 'http://ebook.3m.com/delivery/', $search_3m);
+      $search_3m = str_replace('<form', '<div class="form" ', $search_3m);
+      $search_3m = str_replace('</form', '</div', $search_3m);
+
+      if(strpos($search_3m, 'Sorry, no results found. Please try modifying your query.')){
+
+         $search_3m = str_replace('Sorry, no results found. Please try modifying your query.', 'No results were found.', $search_3m);
+         $search_3m = str_replace('<h3>', '<span class="no-results">', $search_3m);
+         $search_3m = str_replace('</h3>', '</span>', $search_3m);
+
+      }
+
+      $options['last-search'] = $ebooks_search;
+
+      return '<div><div><div>'.$search_3m . '<div id="ebooks-loading-panel" class="loading-3m" style="display: none; ">Searching Books</div>';
+   }
+   else{
+
+      $options['last-search'] = $ebooks_search;
+
+      return '3M Page is not working properly';
+   }
+}
+
+function ebooks_get_overdrive_html($ebooks_search, &$options){
+
+   //filter options
+
+   //creating get params
+   $get_params = '';
+
+   //creating string for further use.
+   //$par with the requisites used by the post when sending the search
+   $par = array();
+
+   if(isset($options['search-within-results'])){
+      $par['SearchResult'] = $options['last-search'];
+      $par['FreeFormFields'] = 'title,creator,keyword';
+      $par['FreeFormCriteria'] = $ebooks_search;
+
+      if(isset($options['only-available'])){
+         $par['Availcopies'] = '>*0';
+      }
+
+      $get_params = 'Type=FreeForm&SortBy=relevancy';
+   }
+   else{
+      $par['FullTextField'] = 'All';
+      $par['FullTextCriteria'] = $ebooks_search;
+
+      if(isset($options['only-available'])){
+         $par['filterbyavailable'] = 'true';
+      }
+
+      $get_params = 'Type=FullText';
+   }
+
+   //this is the string that is goint to contains the url params
+   $params = '';
+   foreach($par as $i=>$v){
+      if($params != '')
+         $params .= '&';
+      $params .= $i . '=' . urlencode($v);
+   }
+
+
+
+   //GET THE SET-COOKIE
+
+
+   $ebooks_overd = curl_init();
+
+   if(isset($options['search-within-results'])){
+      $setCookie = $options['last-cookie'];
+      curl_setopt($ebooks_overd, CURLOPT_COOKIE, $setCookie);
+   }
+
+   curl_setopt($ebooks_overd, CURLOPT_URL, 'http://myrcpl.lib.overdrive.com/');
+   curl_setopt($ebooks_overd, CURLOPT_RETURNTRANSFER, true);
+   curl_setopt($ebooks_overd, CURLOPT_HEADER, true);
+   curl_setopt($ebooks_overd, CURLOPT_REFERER, 'myrcpl.lib.overdrive.com');
+   curl_setopt($ebooks_overd, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.56 Safari/536.5');
+   curl_setopt($ebooks_overd, CURLINFO_HEADER_OUT, true);
+
+   $search_overd = curl_exec($ebooks_overd);
+
+   $i = strpos($search_overd, 'Set-Cookie: ') + 12;
+   $h = strpos(substr($search_overd, $i), "\n");
+
+   if(!isset($options['search-within-results'])){
+      $setCookie = explode('; ', trim(substr($search_overd, $i, $h)));
+      $setCookie = $setCookie[0];
+   }
+
+   $options['last-cookie'] = $setCookie;
+
+
+
+   $i = strpos($search_overd, 'Location: ') + 10;
+   $h = strpos(substr($search_overd, $i), "\n");
+
+   $cookie_url = substr($search_overd, $i, $h);
+   $cookie_url = str_replace('http://myrcpl.lib.overdrive.com/', '', $cookie_url);
+   $cookie_url = trim(str_replace('/Default.htm', '', $cookie_url));
+
+   $full_url = "http://myrcpl.lib.overdrive.com/$cookie_url/BANGSearch.dll?$get_params";
+
+   $ebooks_overd = curl_init();
+   curl_setopt($ebooks_overd, CURLOPT_URL, $full_url );
+   curl_setopt($ebooks_overd, CURLOPT_RETURNTRANSFER, true);
+   curl_setopt($ebooks_overd, CURLOPT_POST, true);
+   curl_setopt($ebooks_overd, CURLOPT_HEADER, true);
+   curl_setopt($ebooks_overd, CURLOPT_POSTFIELDS, $params);
+   curl_setopt($ebooks_overd, CURLOPT_REFERER, 'myrcpl.lib.overdrive.com');
+   curl_setopt($ebooks_overd, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.56 Safari/536.5');
+   curl_setopt($ebooks_overd, CURLINFO_HEADER_OUT, true);
+
+   $search_overd = curl_exec($ebooks_overd);
+
+
+
+
+   //getting only link that we need.
+   //i-> where to start h-> how many char to go
+   $i= strpos($search_overd, 'href="')+6;
+   $h= strpos($search_overd, '">here') - $i;
+   $link_overd = "http://myrcpl.lib.overdrive.com" . substr($search_overd, $i, $h);
+
+   //Save last search ID
+   $i = strpos($link_overd, 'SearchID=') + 9;
+   $h = strpos(substr($link_overd, $i), '&');
+   $h = $h !== false ? $h : strlen($link_overd) - $i;
+   $search_id = substr($link_overd, $i, $h);
+   $options['last-search'] = $search_id;
+
+   if(isset($options['search-within-results'])){
+      $link_overd .= '&SortBy=relevancy';
+   }
+
+   //getting content from the link
+   curl_setopt($ebooks_overd, CURLOPT_URL, $link_overd);
+   curl_setopt($ebooks_overd, CURLOPT_COOKIE, $setCookie);
+   curl_setopt($ebooks_overd, CURLOPT_HEADER, true);
+   curl_setopt($ebooks_overd, CURLOPT_POST, false);
+   $search_overd = curl_exec($ebooks_overd);
+
+
+   //getting only table that we need.
+   //i-> where to start h-> how many char to go
+   $i= strpos($search_overd, '<table border="0" width="100%" cellspacing="0" cellpadding="0">
+<script language="JavaScript"><!--
+g_bFutureOnSaleDate = false;
+//--></script>');
+
+   $h = strpos($search_overd, '</table>
+<hr color="#808080" size="1" noshade>
+<table border="0" align="center" cellpadding="3" cellspacing="2">')-$i;
+
+   $search_overd = substr($search_overd, $i, $h);
+   $search_overd = str_replace('href="', 'href="http://myrcpl.lib.overdrive.com/', $search_overd);
+   $search_overd = str_replace('"/', '"http://myrcpl.lib.overdrive.com/', $search_overd);
+   $search_overd = str_replace('<form', '<div class="form" ',$search_overd);
+   $search_overd = str_replace('</form', '</div',$search_overd);
+   $search_overd = str_replace('<td width="60"', '<td class="ebook-img-col" ', $search_overd);
+   $search_overd = str_replace('<td width="15"', '<td class="ebook-empty-col" ', $search_overd);
+   $search_overd = str_replace('<td height="5"', '<td class="ebook-empty-col" ', $search_overd);
+   $search_overd = str_replace('<td colspan="2"', '<td class="ebook-description-col" ', $search_overd);
+   $search_overd = str_replace('<tr valign="top">' . "\r\n\t" . '<td', '<tr valign="top"><td class="ebook-source-col" ', $search_overd);
+   $search_overd = str_replace('<td colspan="3"', '<td class="ebook-end-item" ', $search_overd);
+
+   if(trim($search_overd) == ''){
+      return "No results were found.";
+   }
+
+   //CHANGE AUTHORS NAME ORDER
+
+   $search_overd = ebooks_overdrive_authorname($search_overd, $setCookie, $cookie_url);
+
+   return $search_overd . '</table>' . '<div id="ebooks-loading-panel" class="loading-overdrive" style="display: none; ">Searching Books</div>';
+}
+
+function ebooks_overdrive_author(){
+
+   $book = $_GET['book_id'];
+   $cookie = $_GET['cookie'];
+   $cookie_url = $_GET['cookie_url'];
+
+
+   $ch = curl_init();
+
+   curl_setopt($ch, CURLOPT_URL, 'http://myrcpl.lib.overdrive.com/'.$cookie_url.'/ContentDetails.htm?ID=' . $book);
+   curl_setopt($ch, CURLOPT_COOKIE, $cookie);
+   curl_setopt($ch, CURLOPT_REFERER, 'myrcpl.lib.overdrive.com');
+   curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.56 Safari/536.5');
+   curl_setopt($ch, CURLINFO_HEADER_OUT, true);
+   curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+   curl_setopt($ch, CURLOPT_HEADER, true);
+
+   $content = curl_exec($ch);
+
+   $i = strpos($content, 'href="BANGSearch.dll?Type=Creator&ID=') + 6;
+   $h = strpos(substr($content, $i), '"');
+
+   $author_url = substr($content, $i, $h);
+
+   header('Location: http://myrcpl.lib.overdrive.com/'.$cookie_url.'/' . $author_url);
+}
+
+
+function ebooks_overdrive_authorname($search_overd, $setCookie, $cookie_url){
+   //CHANGE AUTHORS NAME ORDER
+
+   while(($pos = strpos($search_overd, '<small>')) !== false){
+      $pos += 7;
+
+      $text = substr($search_overd, $pos);
+
+      $end = strpos($text, '</small>');
+
+      $text = substr($text, 0, $end);
+
+      if(strpos($text, '<b>') === false){
+         $i = strrpos(substr($search_overd, 0, $pos),'href="http://myrcpl.lib.overdrive.com/ContentDetails.htm?ID=') + strlen('href="http://myrcpl.lib.overdrive.com/ContentDetails.htm?ID=');
+         $h = strpos(substr($search_overd, $i), '"');
+
+         $book_id = substr($search_overd, $i, $h);
+
+         $author = trim(strip_tags($text));
+         if(!$author)
+            $author = 'by';
+         $author[0] = ' ';
+         $author[1] = ' ';
+         $author = trim($author);
+
+         $author = explode(' ', $author);
+         $name = $author[count($author)-1] . ', ';
+         unset($author[count($author)-1]);
+         $name .= implode(' ', $author);
+
+         $name = '<a href="?q=ebooks/overdrive/author/&cookie='.urlencode($setCookie).'&cookie_url='.urlencode($cookie_url).'&book_id='.urlencode($book_id).'">' . $name . '</a>';
+
+         $search_overd = substr($search_overd, 0, $pos-7) . '<small class="author">' . $name . substr($search_overd, $pos + $end);
+
+         unset($author);
+         unset($name);
+      }
+      else{
+         $search_overd = substr($search_overd, 0, $pos-7) . '<small class="sub-title">' . substr($search_overd, $pos);
+      }
+
+      unset($text);
+      unset($end);
+      unset($pos);
+   }
+
+   return $search_overd;
+}
+

@@ -1,0 +1,170 @@
+/**
+*
+*  Ebook Module: loading.js
+*
+*  Module developed for integration of diferent ebook vendors for the libraries.
+*
+* @author Suzane Goncalves <suzanehgoncalves@gmail.com>
+* @copyright GPL2 2012, Suzane Goncalves
+*
+*/
+
+
+/************** BLOCK ***************/
+#ebooks-block-form {
+   text-align:center;
+}
+
+
+/************** LOADING *************/
+
+#ebooks-loading-panel{
+   width:100%;
+   background:url('loading.gif') no-repeat left center;
+   padding-left:30px;
+   font-weight:bold;
+   line-height:24px;
+   display:none;
+}
+
+
+/************** 3M ******************/
+
+
+#ebooks-3m h3 fieldset{
+   display:none;
+}
+
+
+#ebooks-3m .fallback{
+   display:none;
+}
+
+#ebooks-3m img{
+   vertical-align:top;
+   width: 48px;
+   height: 77px;
+}
+
+#ebooks-3m p{
+   display:inline-block;
+   margin-left:10px;
+      width:220px;
+}
+
+#ebooks-3m a{
+   vertical-align:top;
+}
+
+#ebooks-3m p strong{
+   display:inline-block;
+
+}
+
+#ebooks-3m .form{
+   display:inline-block;
+   text-align:center;
+   float:right;
+   display:none;
+}
+
+#ebooks-3m h3{
+   display:none;
+}
+
+
+#ebooks-3m .no-results{
+   display:block;
+}
+
+#ebooks-3m #nav-list{
+   display:block;
+   text-align:center;
+   display:none;
+}
+
+#ebooks-3m .doc-link{
+   display:block;
+   clear:both;
+   margin-bottom:5px;
+}
+
+#ebooks-3m .clear{
+   clear:both;
+}
+
+#ebooks-3m{
+
+}
+
+
+
+/************** OVERDRIVE **************/
+
+#ebooks-overdrive table{
+   border-collapse: collapse;
+}
+
+#ebooks-overdrive table{
+   margin:0px;
+   padding:0px;
+}
+
+
+#ebooks-overdrive table tbody{
+   border:none;
+}
+
+#ebooks-overdrive .ebook-img-col{
+   width:40px;
+   padding:0px;
+   margin:0px;
+}
+
+#ebooks-overdrive .ebook-img-col img{
+   width: 48px;
+   height: 77px;
+}
+
+#ebooks-overdrive .ebook-img-col .imagecontainer{
+   display:block;
+}
+
+#ebooks-overdrive .ebook-img-col div{
+   display:none;
+}
+
+#ebooks-overdrive div small b{
+   display:none;
+}
+#ebooks-overdrive .ebook-empty-col{
+   display:none;
+}
+
+#ebooks-overdrive .ebook-description-col{
+   display:none;
+}
+
+#ebooks-overdrive .ebook-source-col{
+   display:none;
+}
+
+#ebooks-overdrive .ebook-end-item{
+   display:none;
+}
+
+
+#ebooks-overdrive{
+   width:45%;
+   float:right;
+}
+
+#ebooks-3m{
+   width:45%;
+   float:left;
+}
+
+#ebooks-3m legend, #ebooks-overdrive legend{
+   font-weight:bold;
+}
+
